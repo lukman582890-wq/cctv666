@@ -236,7 +236,7 @@ const server = http.createServer(async (req, res) => {
       const clamp = n => Math.max(-1, Math.min(1, Number.isFinite(Number(n)) ? Number(n) : 0));
       const pan = clamp(data.pan), tilt = clamp(data.tilt), zoom = clamp(data.zoom);
       if (!pan && !tilt && !zoom) return send(res, 400, { error: 'Arah gerakan kosong.' });
-      const velocity = '<tptz:Velocity><tt:PanTilt x="' + pan + '" y="' + tilt + '"/><tt:Zoom x="' + zoom + '"/></tptz:Velocity><tptz:Timeout>PT0.8S</tptz:Timeout>';
+      const velocity = '<tptz:Velocity><tt:PanTilt x="' + pan + '" y="' + tilt + '"/><tt:Zoom x="' + zoom + '"/></tptz:Velocity><tptz:Timeout>PT2S</tptz:Timeout>';
       await ptzRequest('ContinuousMove', velocity);
       return send(res, 200, { ok: true });
     } catch (error) { return send(res, 400, { error: error.message }); }
