@@ -12,6 +12,7 @@ let ffmpeg = null;
 let streamClients = new Set();
 let lastChunk = null;
 let state = { connected: false, camera: null, message: 'Belum terhubung' };
+let cameraSession = null;
 
 function isPrivateClient(req) {
   const ip = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
@@ -34,7 +35,7 @@ function wsse(user, pass) {
   return `<wsse:Security soap:mustUnderstand="1" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"><wsse:UsernameToken><wsse:Username>${xmlEscape(user)}</wsse:Username><wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest">${digest}</wsse:Password><wsse:Nonce EncodingType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary">${nonce.toString('base64')}</wsse:Nonce><wsu:Created>${created}</wsu:Created></wsse:UsernameToken></wsse:Security>`;
 }
 async function soap(endpoint, action, body, user, pass) {
-  const envelope = `<?xml version="1.0" encoding="UTF-8"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tds="http://www.onvif.org/ver10/device/wsdl" xmlns:trt="http://www.onvif.org/ver10/media/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema"><s:Header>${wsse(user, pass)}</s:Header><s:Body>${body}</s:Body></s:Envelope>`;
+  const envelope = `<?xml version="1.0" encoding="UTF-8"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tds="http://www.onvif.org/ver10/device/wsdl" xmlns:trt="http://www.onvif.org/ver10/media/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema" xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"><s:Header>${wsse(user, pass)}</s:Header><s:Body>${body}</s:Body></s:Envelope>`;
   const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/soap+xml; charset=utf-8; action="' + action + '"' }, body: envelope, signal: AbortSignal.timeout(5000) });
   const text = await response.text();
   if (!response.ok || /<[^>]*Fault\b/i.test(text)) throw new Error('Kamera menolak permintaan ONVIF. Periksa ONVIF, nama pengguna, dan kata sandi.');
@@ -46,6 +47,10 @@ function tag(xml, name) {
   return match ? match[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
 }
 function unescapeXml(s) { return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'"); }
+function serviceXaddr(xml, service) {
+  const block = xml.match(new RegExp('<[^>]*' + service + '\\b[^>]*>([\\s\\S]*?)<\\/[^>]*' + service + '\\s*>', 'i'));
+  return block ? unescapeXml(tag(block[1], 'XAddr')) : '';
+}
 async function getRtsp(ip, user, pass, port) {
   const candidates = port ? [port] : [80, 8899, 8080];
   let deviceEndpoint, caps;
@@ -72,6 +77,37 @@ async function getRtsp(ip, user, pass, port) {
   if (!parsed.username) parsed.username = user;
   if (!parsed.password) parsed.password = pass;
   return parsed.toString();
+}
+async function ptzRequest(operation, innerXml) {
+  if (!cameraSession || !cameraSession.ptzEndpoint || !cameraSession.profileToken) {
+    throw new Error('Kamera ini belum menyediakan layanan PTZ ONVIF.');
+  }
+  const profile = xmlEscape(cameraSession.profileToken);
+  return soap(
+    cameraSession.ptzEndpoint,
+    'http://www.onvif.org/ver20/ptz/wsdl/' + operation,
+    '<tptz:' + operation + '><tptz:ProfileToken>' + profile + '</tptz:ProfileToken>' + innerXml + '</tptz:' + operation + '>',
+    cameraSession.user,
+    cameraSession.pass
+  );
+}
+function readJson(req) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', chunk => { raw += chunk; if (raw.length > 16000) reject(new Error('Permintaan terlalu besar.')); });
+    req.on('end', () => { try { resolve(JSON.parse(raw || '{}')); } catch { reject(new Error('Data tidak valid.')); } });
+    req.on('error', reject);
+  });
+}
+function parsePresets(xml) {
+  const result = [];
+  const re = /<(?:(?:\\w+):)?Preset\\b([^>]*)>([\\s\\S]*?)<\\/(?:(?:\\w+):)?Preset\\s*>/gi;
+  for (const match of xml.matchAll(re)) {
+    const token = (match[1].match(/\\btoken=["']([^"']+)["']/i) || [])[1];
+    const name = unescapeXml(tag(match[2], 'Name'));
+    if (token) result.push({ token: unescapeXml(token), name: name || 'Preset ' + (result.length + 1) });
+  }
+  return result;
 }
 function makeRtspUri(ip, user, pass, streamPath) {
   const normalized = streamPath.startsWith('/') ? streamPath : '/' + streamPath;
@@ -176,9 +212,53 @@ const server = http.createServer(async (req, res) => {
       return send(res, 502, { error: error.message });
     }
   }
+  if (url.pathname.startsWith('/api/ptz/') && req.method !== 'GET') {
+    if (!authorized(req, url)) return send(res, 401, { error: 'PIN aplikasi salah.' });
+  }
+  if (url.pathname === '/api/ptz/presets' && req.method === 'GET') {
+    if (!authorized(req, url)) return send(res, 401, { error: 'PIN aplikasi salah.' });
+    try {
+      const xml = await ptzRequest('GetPresets', '');
+      return send(res, 200, { presets: parsePresets(xml) });
+    } catch (error) { return send(res, 400, { error: error.message }); }
+  }
+  if (url.pathname === '/api/ptz/move' && req.method === 'POST') {
+    try {
+      const data = await readJson(req);
+      const clamp = n => Math.max(-1, Math.min(1, Number.isFinite(Number(n)) ? Number(n) : 0));
+      const pan = clamp(data.pan), tilt = clamp(data.tilt), zoom = clamp(data.zoom);
+      if (!pan && !tilt && !zoom) return send(res, 400, { error: 'Arah gerakan kosong.' });
+      const velocity = '<tptz:Velocity><tt:PanTilt x="' + pan + '" y="' + tilt + '"/><tt:Zoom x="' + zoom + '"/></tptz:Velocity><tptz:Timeout>PT0.8S</tptz:Timeout>';
+      await ptzRequest('ContinuousMove', velocity);
+      return send(res, 200, { ok: true });
+    } catch (error) { return send(res, 400, { error: error.message }); }
+  }
+  if (url.pathname === '/api/ptz/stop' && req.method === 'POST') {
+    try { await ptzRequest('Stop', '<tptz:PanTilt>true</tptz:PanTilt><tptz:Zoom>true</tptz:Zoom>'); return send(res, 200, { ok: true }); }
+    catch (error) { return send(res, 400, { error: error.message }); }
+  }
+  if (url.pathname === '/api/ptz/presets' && req.method === 'POST') {
+    try {
+      const data = await readJson(req);
+      const name = String(data.name || '').trim().slice(0, 40);
+      if (!name) return send(res, 400, { error: 'Isi nama preset terlebih dahulu.' });
+      const xml = await ptzRequest('SetPreset', '<tptz:PresetName>' + xmlEscape(name) + '</tptz:PresetName>');
+      const token = unescapeXml(tag(xml, 'PresetToken'));
+      return send(res, 200, { ok: true, token });
+    } catch (error) { return send(res, 400, { error: error.message }); }
+  }
+  if (url.pathname === '/api/ptz/preset/goto' && req.method === 'POST') {
+    try {
+      const data = await readJson(req);
+      const token = String(data.token || '').slice(0, 128);
+      if (!token) return send(res, 400, { error: 'Pilih preset terlebih dahulu.' });
+      await ptzRequest('GotoPreset', '<tptz:PresetToken>' + xmlEscape(token) + '</tptz:PresetToken>');
+      return send(res, 200, { ok: true });
+    } catch (error) { return send(res, 400, { error: error.message }); }
+  }
   if (url.pathname === '/api/disconnect' && req.method === 'POST') {
     if (!authorized(req, url)) return send(res, 401, { error: 'PIN aplikasi salah.' });
-    stopStream(); state.message = 'Kamera terputus'; return send(res, 200, { ok: true });
+    stopStream(); cameraSession = null; state.message = 'Kamera terputus'; return send(res, 200, { ok: true });
   }
   if (url.pathname === '/stream.mjpg') {
     if (!authorized(req, url)) { res.writeHead(401); return res.end(); }
