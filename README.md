@@ -38,4 +38,4 @@ This MVP is LAN-only and does not encrypt local HTTP traffic. Do not expose its 
 - `src/server.js`: local HTTP server, ONVIF discovery, and FFmpeg streaming
 - `public/index.html`: responsive browser interface
 
-The project is an early MVP. PTZ controls, audio, recording, multiple cameras, and automated packaging are not included.
+The project is an early MVP. ONVIF PTZ movement and presets are included when the camera exposes a PTZ service. Audio, recording, multiple cameras, and automated packaging are not included yet. Generic ONVIF does not reliably configure a camera's microSD schedule, event triggers, or recording quality; those controls need support for the camera firmware's own API.
