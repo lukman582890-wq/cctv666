@@ -62,20 +62,20 @@ async function getRtsp(ip, user, pass, port) {
     } catch (_) {}
   }
   if (!deviceEndpoint) throw new Error('ONVIF belum merespons. Pastikan ONVIF aktif dan PC satu jaringan dengan kamera.');
-  const mediaBlock = caps.match(/<[^>]*Media\\b[^>]*>([\\s\\S]*?)<\\/[^>]*Media\\s*>/i);
-  const ptzBlock = caps.match(/<[^>]*PTZ\\b[^>]*>([\\s\\S]*?)<\\/[^>]*PTZ\\s*>/i);
+  const mediaBlock = caps.match(/<[^>]*Media\b[^>]*>([\s\S]*?)<\/[^>]*Media\s*>/i);
+  const ptzBlock = caps.match(/<[^>]*PTZ\b[^>]*>([\s\S]*?)<\/[^>]*PTZ\s*>/i);
   let media = mediaBlock ? unescapeXml(tag(mediaBlock[1], 'XAddr')) : '';
   const ptzEndpoint = ptzBlock ? unescapeXml(tag(ptzBlock[1], 'XAddr')) : '';
-  if (!/^https?:\\/\\//i.test(media)) media = deviceEndpoint.replace('/onvif/device_service', '/onvif/media_service');
+  if (!/^https?:\/\//i.test(media)) media = deviceEndpoint.replace('/onvif/device_service', '/onvif/media_service');
   const profilesXml = await soap(media, 'http://www.onvif.org/ver10/media/wsdl/GetProfiles', '<trt:GetProfiles/>', user, pass);
-  const profileMatch = profilesXml.match(/<[^>]*Profiles\\b[^>]*\\btoken="([^"]+)"/i);
+  const profileMatch = profilesXml.match(/<[^>]*Profiles\b[^>]*\btoken="([^"]+)"/i);
   if (!profileMatch) throw new Error('Kamera merespons ONVIF, tetapi profil videonya tidak ditemukan.');
   const profileToken = profileMatch[1];
   const token = xmlEscape(profileToken);
   const streamXml = await soap(media, 'http://www.onvif.org/ver10/media/wsdl/GetStreamUri', '<trt:GetStreamUri><trt:StreamSetup><tt:Stream>RTP-Unicast</tt:Stream><tt:Transport><tt:Protocol>RTSP</tt:Protocol></tt:Transport></trt:StreamSetup><trt:ProfileToken>' + token + '</trt:ProfileToken></trt:GetStreamUri>', user, pass);
   let uri = unescapeXml(tag(streamXml, 'Uri'));
   let streamUri = null;
-  if (/^rtsps?:\\/\\//i.test(uri)) {
+  if (/^rtsps?:\/\//i.test(uri)) {
     const parsed = new URL(uri);
     if (!parsed.username) parsed.username = user;
     if (!parsed.password) parsed.password = pass;
@@ -107,9 +107,9 @@ function readJson(req) {
 }
 function parsePresets(xml) {
   const result = [];
-  const re = /<[^>]*Preset\\b([^>]*)>([\\s\\S]*?)<\\/[^>]*Preset\\s*>/gi;
+  const re = /<[^>]*Preset\b([^>]*)>([\s\S]*?)<\/[^>]*Preset\s*>/gi;
   for (const match of xml.matchAll(re)) {
-    const token = (match[1].match(/\\btoken="([^"]+)"/i) || [])[1];
+    const token = (match[1].match(/\btoken="([^"]+)"/i) || [])[1];
     const name = unescapeXml(tag(match[2], 'Name'));
     if (token) result.push({ token: unescapeXml(token), name: name || 'Preset ' + (result.length + 1) });
   }
