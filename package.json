@@ -1,0 +1,12 @@
+{
+  "name": "ruang-kamera",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first web viewer for ONVIF and RTSP cameras",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

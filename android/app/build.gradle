@@ -1,0 +1,23 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'id.ruangkamera.mobile'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'id.ruangkamera.mobile'
+        minSdk 26
+        targetSdk 34
+        versionCode 3
+        versionName '0.2.1'
+    }
+}
+
+dependencies {
+    def media3Version = '1.4.1'
+    implementation "androidx.media3:media3-exoplayer:$media3Version"
+    implementation "androidx.media3:media3-exoplayer-rtsp:$media3Version"
+    implementation "androidx.media3:media3-ui:$media3Version"
+}
