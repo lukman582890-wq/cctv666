@@ -72,15 +72,17 @@ async function getRtsp(ip, user, pass, port) {
   if (!profileMatch) throw new Error('Kamera merespons ONVIF, tetapi profil videonya tidak ditemukan.');
   const profileToken = profileMatch[1];
   const token = xmlEscape(profileToken);
-  const streamXml = await soap(media, 'http://www.onvif.org/ver10/media/wsdl/GetStreamUri', '<trt:GetStreamUri><trt:StreamSetup><tt:Stream>RTP-Unicast</tt:Stream><tt:Transport><tt:Protocol>RTSP</tt:Protocol></tt:Transport></trt:StreamSetup><trt:ProfileToken>' + token + '</trt:ProfileToken></trt:GetStreamUri>', user, pass);
-  let uri = unescapeXml(tag(streamXml, 'Uri'));
   let streamUri = null;
-  if (/^rtsps?:\/\//i.test(uri)) {
-    const parsed = new URL(uri);
-    if (!parsed.username) parsed.username = user;
-    if (!parsed.password) parsed.password = pass;
-    streamUri = parsed.toString();
-  }
+  try {
+    const streamXml = await soap(media, 'http://www.onvif.org/ver10/media/wsdl/GetStreamUri', '<trt:GetStreamUri><trt:StreamSetup><tt:Stream>RTP-Unicast</tt:Stream><tt:Transport><tt:Protocol>RTSP</tt:Protocol></tt:Transport></trt:StreamSetup><trt:ProfileToken>' + token + '</trt:ProfileToken></trt:GetStreamUri>', user, pass);
+    const uri = unescapeXml(tag(streamXml, 'Uri'));
+    if (/^rtsps?:\/\//i.test(uri)) {
+      const parsed = new URL(uri);
+      if (!parsed.username) parsed.username = user;
+      if (!parsed.password) parsed.password = pass;
+      streamUri = parsed.toString();
+    }
+  } catch (_) {}
   return { uri: streamUri, ptzEndpoint, profileToken, user, pass };
 }
 
