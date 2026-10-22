@@ -31,14 +31,13 @@ Allow Node.js on the Windows **Private network** profile if the firewall asks. D
 
 ## Android app
 
-The Android app is a mobile client for the Windows viewer; the PC must stay on and run the viewer because it hosts FFmpeg and the local camera connection.
+The Android app connects directly to the camera over the home network. A PC and the Windows viewer do not need to stay running. The camera must expose a compatible RTSP stream for video; ONVIF is used to discover the stream and control PTZ/presets when supported. Keep the phone and camera on the same Wi-Fi.
 
-1. Build the Windows viewer as above and keep the phone on the same home Wi-Fi.
-2. Install `android/app/build/outputs/apk/debug/app-debug.apk` on the phone.
-3. Open Ruang Kamera and enter the private LAN address printed by the PC app, such as `http://192.168.1.3:8787`.
-4. Enter the pairing PIN shown in the PC window, then connect to the camera in the viewer.
+1. Install `android/app/build/outputs/apk/debug/app-debug.apk` on the phone.
+2. Open Ruang Kamera and enter the camera's private LAN IP, ONVIF username, and password.
+3. Tap **Hubungkan**. The password is kept in memory only while the app runs.
 
-The APK accepts only private IPv4 addresses and is signed with the standard debug key. It is suitable for personal installation; a public Play Store release needs a release signing key and store review. GitHub Actions builds the APK for pushes and pull requests; download it from the run's `RuangKamera-debug-apk` artifact.
+The APK accepts private IPv4 camera addresses and is signed with the standard debug key. It is suitable for personal installation; a public Play Store release needs a release signing key and store review. GitHub Actions builds the APK for pushes and pull requests; download it from the run's `RuangKamera-debug-apk` artifact. Some camera firmwares may require a different RTSP path or codec. Camera microSD recording settings are not yet implemented; generic ONVIF does not provide verified access to this model's proprietary recording controls.
 
 ## Safety
 
@@ -49,4 +48,4 @@ This MVP is LAN-only and does not encrypt local HTTP traffic. Do not expose its 
 - `src/server.js`: local HTTP server, ONVIF discovery, and FFmpeg streaming
 - `public/index.html`: responsive browser interface
 
-The project is an early MVP. ONVIF PTZ movement and presets are included when the camera exposes a PTZ service. Camera microSD recording settings, multiple cameras, and automated Windows packaging are not included yet. Generic ONVIF does not configure continuous/event recording, camera audio recording, or SD/HD recording quality; those settings need verified support for the camera firmware's own API. The APK currently provides mobile access to the Windows viewer and does not connect to the camera by itself.
+The project is an early MVP. ONVIF PTZ movement and presets are included when the camera exposes a PTZ service. Camera microSD recording settings, multiple cameras, and automated Windows packaging are not included yet. Generic ONVIF does not configure continuous/event recording, camera audio recording, or SD/HD recording quality; those settings need verified support for the camera firmware's own API.
