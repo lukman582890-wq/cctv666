@@ -7,6 +7,8 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -43,8 +45,10 @@ public final class MainActivity extends Activity {
     private static final int CYAN = Color.rgb(67, 209, 201);
     private static final int MUTED = Color.rgb(159, 183, 200);
     private static final String DEFAULT_IP = "";
+    private static final long STREAM_ATTEMPT_TIMEOUT_MS = 12000;
 
     private final ExecutorService network = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final List<String> streamCandidates = new ArrayList<>();
     private final List<OnvifClient.Preset> presets = new ArrayList<>();
     private EditText ipInput, portInput, userInput, passwordInput, presetNameInput;
@@ -56,6 +60,7 @@ public final class MainActivity extends Activity {
     private OnvifClient.Session session;
     private String cameraIp, cameraUser, cameraPassword;
     private int streamIndex = -1;
+    private Runnable streamTimeout;
 
     @Override
     public void onCreate(Bundle state) {
@@ -68,8 +73,12 @@ public final class MainActivity extends Activity {
         playerView.setUseController(false);
         player.addListener(new Player.Listener() {
             @Override public void onPlaybackStateChanged(int playbackState) {
-                if (playbackState == Player.STATE_READY) setStatus("Kamera terhubung");
-                else if (playbackState == Player.STATE_BUFFERING) setStatus("Menerima video dari kamera…");
+                if (playbackState == Player.STATE_READY) {
+                    cancelStreamTimeout();
+                    setStatus("Kamera terhubung");
+                } else if (playbackState == Player.STATE_BUFFERING) {
+                    setStatus("Menerima video dari kamera…");
+                }
             }
 
             @Override public void onPlayerError(PlaybackException error) {
@@ -347,15 +356,23 @@ public final class MainActivity extends Activity {
         presets.clear();
         network.execute(() -> {
             OnvifClient.Session found = OnvifClient.discover(cameraIp, cameraUser, cameraPassword, requestedPort);
-            List<String> candidates = new ArrayList<>(found.streamUris);
+            List<String> candidates = new ArrayList<>();
+            for (String uri : found.streamUris) candidates.add(OnvifClient.withoutCredentials(uri));
+            candidates.add(OnvifClient.makeRtspUri(cameraIp, "", "", "/live/ch00_1"));
+            candidates.add(OnvifClient.makeRtspUri(cameraIp, "", "", "/live/ch00_0"));
+            for (String uri : found.streamUris) candidates.add(uri);
             candidates.add(OnvifClient.makeRtspUri(cameraIp, cameraUser, cameraPassword, "/live/ch00_1"));
             candidates.add(OnvifClient.makeRtspUri(cameraIp, cameraUser, cameraPassword, "/live/ch00_0"));
             runOnUiThread(() -> {
                 session = found;
                 for (String candidate : candidates) if (!streamCandidates.contains(candidate)) streamCandidates.add(candidate);
-                passwordInput.setText("");
-                streamIndex = 0;
-                playCandidate(0);
+                    passwordInput.setText("");
+                    streamIndex = -1;
+                    if (streamCandidates.isEmpty()) {
+                        setStatus("Alamat stream RTSP kamera tidak ditemukan.");
+                    } else {
+                        playCandidate(0);
+                    }
                 connectButton.setEnabled(true);
                 connectButton.setText("Hubungkan lagi");
                 loadPresets();
@@ -365,18 +382,34 @@ public final class MainActivity extends Activity {
 
     private void playCandidate(int index) {
         if (index < 0 || index >= streamCandidates.size() || player == null) return;
+        cancelStreamTimeout();
         streamIndex = index;
         String candidate = streamCandidates.get(index);
-        setStatus(index == 0 ? "Membuka stream langsung dari kamera…" : "Mencoba jalur stream kamera…");
+        setStatus(index == 0 ? "Membuka stream kamera tanpa login RTSP…" : "Mencoba jalur RTSP " + (index + 1) + " dari " + streamCandidates.size() + "…");
         try {
             RtspMediaSource.Factory factory = new RtspMediaSource.Factory().setForceUseRtpTcp(true).setTimeoutMs(8000);
             player.setMediaSource(factory.createMediaSource(MediaItem.fromUri(URI.create(candidate).toString())));
             player.prepare();
             player.play();
+            final int attemptedIndex = index;
+            streamTimeout = () -> {
+                if (streamIndex != attemptedIndex || player == null || player.getPlaybackState() == Player.STATE_READY) return;
+                int next = attemptedIndex + 1;
+                if (next < streamCandidates.size()) playCandidate(next);
+                else setStatus("Video tidak merespons. Pastikan HP di Wi-Fi yang sama dan RTSP aktif pada kamera.");
+            };
+            mainHandler.postDelayed(streamTimeout, STREAM_ATTEMPT_TIMEOUT_MS);
         } catch (Exception e) {
             int next = index + 1;
             if (next < streamCandidates.size()) playCandidate(next);
             else setStatus("Alamat RTSP kamera tidak valid.");
+        }
+    }
+
+    private void cancelStreamTimeout() {
+        if (streamTimeout != null) {
+            mainHandler.removeCallbacks(streamTimeout);
+            streamTimeout = null;
         }
     }
 
@@ -463,6 +496,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        cancelStreamTimeout();
         if (player != null) { player.release(); player = null; }
         network.shutdownNow();
         super.onDestroy();

@@ -31,7 +31,7 @@ Allow Node.js on the Windows **Private network** profile if the firewall asks. D
 
 ## Android app
 
-The Android app connects directly to the camera over the home network. A PC and the Windows viewer do not need to stay running. The camera must expose a compatible RTSP stream for video; ONVIF is used to discover the stream and control PTZ/presets when supported. Keep the phone and camera on the same Wi-Fi.
+The Android app connects directly to the camera over the home network. A PC and the Windows viewer do not need to stay running. The camera must expose a compatible RTSP stream for video; ONVIF is used to discover the stream and control PTZ/presets when supported. Keep the phone and camera on the same Wi-Fi. The app tries unauthenticated RTSP first (some V380 firmware allows it), then retries using the camera account and reports a timeout instead of waiting indefinitely.
 
 1. Install `android/app/build/outputs/apk/debug/app-debug.apk` on the phone.
 2. Open Ruang Kamera and enter the camera's private LAN IP, ONVIF username, and password.

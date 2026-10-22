@@ -48,7 +48,7 @@ final class OnvifClient {
 
     static Session discover(String ip, String user, String password, int requestedPort) {
         Session session = new Session(ip, user, password);
-        int[] ports = requestedPort > 0 ? new int[]{requestedPort} : new int[]{80, 8899, 8080};
+        int[] ports = requestedPort > 0 ? new int[]{requestedPort} : new int[]{8899, 80, 8080};
         String capabilities = null;
         for (int port : ports) {
             String endpoint = "http://" + ip + ":" + port + "/onvif/device_service";
@@ -107,6 +107,16 @@ final class OnvifClient {
             String authority = Uri.encode(session.user) + ":" + Uri.encode(session.password) + "@" + host + (port > 0 ? ":" + port : "");
             return uri.getScheme() + "://" + authority + uri.getRawPath() + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery());
         } catch (Exception e) { return null; }
+    }
+
+    static String withoutCredentials(String value) {
+        try {
+            URI uri = URI.create(value);
+            if (!privateIpv4(uri.getHost())) return value;
+            return uri.getScheme() + "://" + uri.getHost() + (uri.getPort() > 0 ? ":" + uri.getPort() : "")
+                    + (uri.getRawPath() == null ? "" : uri.getRawPath())
+                    + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery());
+        } catch (Exception e) { return value; }
     }
 
     static void move(Session s, int pan, int tilt, int zoom) throws Exception {
