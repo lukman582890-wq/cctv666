@@ -29,6 +29,17 @@ FFmpeg is not included. Download a Windows build from the links on the [official
 
 Allow Node.js on the Windows **Private network** profile if the firewall asks. Do not share the PIN or camera password.
 
+## Android app
+
+The Android app is a mobile client for the Windows viewer; the PC must stay on and run the viewer because it hosts FFmpeg and the local camera connection.
+
+1. Build the Windows viewer as above and keep the phone on the same home Wi-Fi.
+2. Install `android/app/build/outputs/apk/debug/app-debug.apk` on the phone.
+3. Open Ruang Kamera and enter the private LAN address printed by the PC app, such as `http://192.168.1.3:8787`.
+4. Enter the pairing PIN shown in the PC window, then connect to the camera in the viewer.
+
+The APK accepts only private IPv4 addresses and is signed with the standard debug key. It is suitable for personal installation; a public Play Store release needs a release signing key and store review.
+
 ## Safety
 
 This MVP is LAN-only and does not encrypt local HTTP traffic. Do not expose its port to the internet. For remote access, use a trusted VPN into the home network. See [SECURITY.md](SECURITY.md).
@@ -38,4 +49,4 @@ This MVP is LAN-only and does not encrypt local HTTP traffic. Do not expose its 
 - `src/server.js`: local HTTP server, ONVIF discovery, and FFmpeg streaming
 - `public/index.html`: responsive browser interface
 
-The project is an early MVP. ONVIF PTZ movement and presets are included when the camera exposes a PTZ service. Audio, recording, multiple cameras, and automated packaging are not included yet. Generic ONVIF does not reliably configure a camera's microSD schedule, continuous/event recording, audio, or SD/HD recording quality; those controls need support for the camera firmware's own API.
+The project is an early MVP. ONVIF PTZ movement and presets are included when the camera exposes a PTZ service. Camera microSD recording settings, multiple cameras, and automated Windows packaging are not included yet. Generic ONVIF does not configure continuous/event recording, camera audio recording, or SD/HD recording quality; those settings need verified support for the camera firmware's own API. The APK currently provides mobile access to the Windows viewer and does not connect to the camera by itself.

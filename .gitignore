@@ -8,6 +8,9 @@ ffmpeg.exe
 ffplay.exe
 ffprobe.exe
 *.dll
+android/local.properties
+android/.gradle/
+android/**/build/
 
 # Logs and temporary output
 *.log
