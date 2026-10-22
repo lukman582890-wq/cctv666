@@ -38,7 +38,7 @@ The Android app is a mobile client for the Windows viewer; the PC must stay on a
 3. Open Ruang Kamera and enter the private LAN address printed by the PC app, such as `http://192.168.1.3:8787`.
 4. Enter the pairing PIN shown in the PC window, then connect to the camera in the viewer.
 
-The APK accepts only private IPv4 addresses and is signed with the standard debug key. It is suitable for personal installation; a public Play Store release needs a release signing key and store review.
+The APK accepts only private IPv4 addresses and is signed with the standard debug key. It is suitable for personal installation; a public Play Store release needs a release signing key and store review. GitHub Actions builds the APK for pushes and pull requests; download it from the run's `RuangKamera-debug-apk` artifact.
 
 ## Safety
 
